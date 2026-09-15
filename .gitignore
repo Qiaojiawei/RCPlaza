@@ -35,3 +35,6 @@ TestResults/
 sysinfo.txt
 *.stackdump
 crashlytics-build.properties
+# Unity Test Framework 自动生成的临时测试场景
+Assets/InitTestScene*.unity
+Assets/InitTestScene*.unity.meta
