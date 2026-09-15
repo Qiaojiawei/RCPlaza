@@ -50,29 +50,69 @@ UI 纯代码、场景运行时构建——仓库只含文本文件，导入即�
 | ③ 25 km/h 定圆侧倾 | 3–5° | **F2** 面板实时看"车身侧倾"；建议半舵跑大半径定圆（满舵最小半径仅约 0.66 m，25 km/h 下 a≈5g 必然翻车） |
 | ④ 电池电压骤降与低压保护 | SOC/电压衰减，LVC 限功/切断 | 右上角 HUD 实时电压/SOC；`PlazaConfig.DischargeTimeScale`（默认 2.0）控制演示倍速；<3.4V/芯限功 50%、<3.2V/芯切断 |
 
-## 四、代码结构
+## 四、自动化验收测试（一条命令反复跑，结果可核对）
+
+本机已通过 Unity Hub（headless CLI）自动安装 2022.3.20f1 编辑器，
+测试使用 Unity Test Framework（`Packages/manifest.json` 已含 `com.unity.test-framework@1.1.33`）：
+EditMode 纯计算单元测试 + PlayMode 真实运行验收，全部无图形批处理执行，
+与机器帧率解耦、可重复运行。
+
+**前置（仅一次）：** 编辑器许可证激活——Unity Hub 图形界面登录 Unity 账号后
+自动生效；或 `Unity.exe -batchmode -createManualActivationFile` 生成 .alf →
+https://license.unity3d.com/manual 上传换 .ulf → `-manualLicenseFile`。
+
+**一键运行**（首次含导入约 10–25 分钟，之后约 3–5 分钟）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\RunTests.ps1
+```
+
+| 参数 | 说明 |
+|---|---|
+| `-EditOnly` / `-PlayOnly` | 只跑其中一个测试程序集 |
+| `-EditorPath <Unity.exe>` | 自定义编辑器路径（默认自动找 Hub 安装的 2022.3.20f1） |
+| `-TimeoutMinutes <n>` | 超时（默认 25；首次导入慢机器可加大） |
+| `-ManualLicense <路径.ulf>` | 手动许可证文件（见上） |
+
+**覆盖内容与判定标准**（`Assets/RCPlaza/Tests/`，[TEST] 行输出实测数值）：
+
+- **EditMode**（毫秒级完成）：电压 sag 数值、<3.4V/芯限功 50%、<3.2V/芯切断且扭矩=0、
+  库仑计 SOC 下降；三段扭矩曲线各段区间值（含两处已记录偏差）；Pacejka \|Fx\|≤μFz 且符号
+  跟随滑移率、摩擦椭圆不越界、峰值后衰减；路面系数表与文档 §3.1 逐值一致；程序纹理生成。
+- **PlayMode**（真实游戏循环，文档 §7 全项自动裁量）：自举完整（场景/HUD/音频/相机/两车）→
+  两车静平衡四轮接地 → **§7① 1 m/s 收油滑行 3–6 m** → **§7② 0→40 km/h 用时
+  2.5–3.5 s** → **§7③ 25 km/h 定圆侧倾均值 2.5–5.5°** → 极速 45–59 km/h（§7④ 辅助：
+  90 m 场地直道限制下的收敛印证）→ **MT 骑上 4.5 cm 路沿**。
+
+**结果解读**：终端打印每个用例 PASS/FAIL 与实测数值；`TestResults\*.xml`（逐用例断言）、
+`TestResults\*.log`（完整 Unity 日志）。全部通过退出码 0，有失败退出码 2——
+可直接用于 CI 门禁或反复回归。
+
+## 五、代码结构
 
 ```
 Assets/RCPlaza/
 ├─ Scenes/RCPlaza_Minimal.unity      极简空场景（仅 RenderSettings 等，不引用任何脚本）
-└─ Scripts/                          （17 个文件，命名空间 RCPlaza.*）
-   ├─ Core/    PlazaConfig(全局/性能/场景常数) · SurfaceData(μ/Crr/Pacejka 系数表)
-   │           CarSpec(两车全参数) · PacejkaTyre(魔术公式+摩擦椭圆) · RcInput(键位+舵机滞后)
-   ├─ Sim/     WheelUnit(raycast 悬挂+Pacejka+ω 积分) · MotorAndBattery(三段扭矩+电压 sag+LVC)
-   │           RcCarController(FixedUpdate 数据流:输入→悬挂→轮胎力→ω→ARB→风阻→休眠)
-   ├─ World/   PlazaBuilder(场景构建) · TextureFactory(程序纹理) · MaterialFactory · SurfaceRegion
-   ├─ Cam/     ChaseCamera(追尾+FPV,FOV 随速)
-   ├─ UI/      HudController(UGUI 纯代码,中文字体,含调试面板)
-   ├─ Audio/   NoiseFactory(白噪/棕噪/谐波合成) · RcAudioEngine(电机+齿轮+胎噪交叉淡化+风噪)
-   └─ Root/    GameBootstrap(RuntimeInitializeOnLoadMethod 引导 + GameHost 主循环)
-```
+├─ Scripts/                          （17 个文件，命名空间 RCPlaza.*）
+│  ├─ Core/    PlazaConfig(全局/性能/场景常数) · SurfaceData(μ/Crr/Pacejka 系数表)
+│  │           CarSpec(两车全参数) · PacejkaTyre(魔术公式+摩擦椭圆) · RcInput(键位+舵机滞后)
+│  ├─ Sim/     WheelUnit(raycast 悬挂+Pacejka+ω 积分) · MotorAndBattery(三段扭矩+电压 sag+LVC)
+│  │           RcCarController(FixedUpdate 数据流:输入→悬挂→轮胎力→ω→ARB→风阻→休眠)
+│  ├─ World/   PlazaBuilder(场景构建) · TextureFactory(程序纹理) · MaterialFactory · SurfaceRegion
+│  ├─ Cam/     ChaseCamera(追尾+FPV,FOV 随速)
+│  ├─ UI/      HudController(UGUI 纯代码,中文字体,含调试面板)
+│  ├─ Audio/   NoiseFactory(白噪/棕噪/谐波合成) · RcAudioEngine(电机+齿轮+胎噪交叉淡化+风噪)
+│  └─ Root/    GameBootstrap(RuntimeInitializeOnLoadMethod 引导 + GameHost 主循环)
+└─ Tests/                             （自动化验收，见上一节）
+   ├─ EditMode/EditModePhysicsTests.cs（电池/torque/Pacejka/路面表/纹理 + asmdef）
+   └─ PlayMode/PlayModeGameplayTests.cs（§7 全项端到端 + asmdef）
 
 物理数据流（100 Hz）：输入 → 电调软启动 → 电池/电机（V=V_ocv−I·R，三段扭矩曲线）
 → 四轮 raycast 悬挂（弹簧+隐式阻尼）→ 接触点速度分解出 λ/α → Pacejka+摩擦椭圆
 → `AddForceAtPosition`（力作用于接触点 → 自然重量转移/俯仰/侧倾）→ 车轮 ω 积分
 → 防倾杆 + 空气阻力 → 静止 1s 无油门自动休眠。
 
-## 五、对设计文档的两处公开偏差
+## 六、对设计文档的两处公开偏差
 
 1. **悬架参数修正**：文档 §3.3 的 k=28000–32000 N/m 会使 2.64 kg 车身静态压缩仅
    0.21 mm（悬挂视觉冻结），25 km/h 定圆侧倾仅 0.04°，与文档自身的
@@ -88,7 +128,7 @@ Assets/RCPlaza/
 车型命名采用风格化描述（"短卡 SCT 型 / 大脚 MT 型"），参数注释标注了参考原型，
 不复制品牌标识与精确外观（文档 §8）。
 
-## 六、性能账目
+## 七、性能账目
 
 - `Time.fixedDeltaTime = 0.01`（100 Hz 物理）、`Application.targetFrameRate = 60`；
 - Rigidbody：CCD + Interpolate、`maxAngularVelocity=20`、`solverIterations=8`；
@@ -96,12 +136,12 @@ Assets/RCPlaza/
 - 每辆车仅 4 条悬挂射线（`Physics.DefaultRaycastLayers` 排除汽车自身的
   Ignore Raycast 层）、1 个刚体、1 个碰撞体；F2 面板左上角实时 FPS 可核对。
 
-## 七、构建 Windows exe
+## 八、构建 Windows exe
 
 菜单 File → Build Settings → 勾选 `Scenes/RCPlaza_Minimal` → 平台 Windows →
 Player Settings 中分辨率自定 → Build。运行后按 F1 查看操作。
 
-## 八、常见问题
+## 九、常见问题
 
 - **首次打开卡的久 / 太多 .meta 变更**：正常——这是 Unity 为全部脚本/场景生成的元数据。
 - **Play 后汽车不动**：检查 Console；本工程所有输入均为 `Input.GetKey`，

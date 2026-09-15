@@ -367,9 +367,12 @@ namespace RCPlaza.Sim
         public Vector3 SpawnPos { get; private set; }
         public Quaternion SpawnRot { get; private set; }
 
-        public void ResetPose()
+        public void ResetPose() => SetPose(SpawnPos, SpawnRot);
+
+        /// <summary>把车放到任意位置/朝向(自动化测试用:长直道极速、路沿冲击等需要指定起点)。</summary>
+        public void SetPose(Vector3 pos, Quaternion rot)
         {
-            transform.SetPositionAndRotation(SpawnPos, SpawnRot);
+            transform.SetPositionAndRotation(pos, rot);
             rb.velocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
             rb.WakeUp();
@@ -379,15 +382,7 @@ namespace RCPlaza.Sim
         }
 
         /// <summary>车型切换:接管另一台车的位置与朝向。</summary>
-        public void TakePoseFrom(RcCarController other)
-        {
-            transform.SetPositionAndRotation(other.transform.position, other.transform.rotation);
-            rb.velocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
-            rb.WakeUp();
-            escThrottle = 0f;
-            idleTime = 0f;
-            for (int i = 0; i < 4; i++) wheels[i].ResetState();
-        }
+        public void TakePoseFrom(RcCarController other) =>
+            SetPose(other.transform.position, other.transform.rotation);
     }
 }

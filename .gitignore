@@ -26,6 +26,11 @@
 *.opendb
 *.VC.db
 
+# 自动化测试产物
+TestResults/
+*.alf
+*.ulf
+
 # Crash / 缓存
 sysinfo.txt
 *.stackdump

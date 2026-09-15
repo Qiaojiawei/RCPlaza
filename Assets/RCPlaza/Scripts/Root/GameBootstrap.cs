@@ -45,6 +45,20 @@ namespace RCPlaza.Root
         public static GameHost I { get; private set; }
         public RcInput PlayerInput { get; } = new RcInput();
 
+        /// <summary>全部车辆(自动化测试/外部工具用)。</summary>
+        public RcCarController[] Cars => cars;
+        /// <summary>当前被控车辆。</summary>
+        public RcCarController ActiveCar => cars != null ? cars[carIdx] : null;
+        /// <summary>测试用:强制切换被控车(等价 Tab,但跳过位置接管)。</summary>
+        public void ForceActiveCar(int idx)
+        {
+            idx = Mathf.Clamp(idx, 0, cars.Length - 1);
+            carIdx = idx;
+            for (int i = 0; i < cars.Length; i++) cars[i].IsActive = (i == carIdx);
+            camScript.SetTarget(cars[carIdx]);
+            hud.SetCar(cars[carIdx]);
+        }
+
         RcCarController[] cars;
         int carIdx;
         ChaseCamera camScript;

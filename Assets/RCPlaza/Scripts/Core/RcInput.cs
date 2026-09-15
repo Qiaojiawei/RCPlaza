@@ -18,6 +18,8 @@ namespace RCPlaza.Core
         public float SteerCurrent { get; private set; }
         /// <summary>手刹(空格)——与前轮制动叠加。</summary>
         public bool Handbrake { get; private set; }
+        /// <summary>自动化测试用转向指令覆盖 ∈[−1,1];−2 = 不覆盖(跟随键盘)。</summary>
+        public float SteerOverrideX = -2f;
 
         // 边沿事件(由 GameHost 轮询消费后自动清零)
         public bool PressedSwitchCar { get; private set; } // Tab
@@ -37,7 +39,7 @@ namespace RCPlaza.Core
             int lft = (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow)) ? 1 : 0;
 
             ThrottleRaw = fwd - bwd;
-            SteerTarget = rgt - lft;
+            SteerTarget = SteerOverrideX >= -1f ? SteerOverrideX : (rgt - lft);
             Handbrake   = Input.GetKey(KeyCode.Space);
 
             // 舵机迟滞:一阶低通逼近"0.06–0.12s/60°"(τ=0.08s → 60° 约需 3τ≈0.24s 的 75%,
