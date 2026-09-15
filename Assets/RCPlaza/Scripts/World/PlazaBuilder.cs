@@ -197,12 +197,12 @@ namespace RCPlaza.World
             return go;
         }
 
-        static GameObject Prim(PrimitiveType p, Transform parent, string name, Vector3 pos, Vector3 scale,
+        static GameObject Prim(PrimitiveType p, GameObject parent, string name, Vector3 pos, Vector3 scale,
                                Material mat, bool keepCollider, Vector3 euler = default(Vector3))
         {
             var go = GameObject.CreatePrimitive(p);
             go.name = name;
-            go.transform.SetParent(parent, false);
+            go.transform.SetParent(parent.transform, false);
             go.transform.localPosition = pos;
             go.transform.localRotation = Quaternion.Euler(euler);
             go.transform.localScale = scale;

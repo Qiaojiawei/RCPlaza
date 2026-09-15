@@ -30,17 +30,20 @@ namespace RCPlaza.Tests
             }
         }
 
+        /// <summary>Prep 结果容器(C# 迭代器不能带 out 参数)。</summary>
+        sealed class CarPrep { public RcCarController car; }
+
         /// <summary>激活 idx 车 → 复位出生点 → 输入清空 → 等待悬挂静平衡。</summary>
-        static IEnumerator PrepCar(int idx, out RcCarController car)
+        static IEnumerator PrepCar(int idx, CarPrep prep)
         {
             Assert.NotNull(Host, "GameHost 未自举(引导失败)");
             Assert.That(Host.Cars.Length, Is.EqualTo(2), "应生成两台车");
             Host.ForceActiveCar(idx);
             Host.PlayerInput.SteerOverrideX = -2f;
-            car = Host.ActiveCar;
-            car.TestThrottleOverride = -1f;
-            car.ResetPose();
-            yield return WaitUntil(() => car.SpeedMps < 0.05f, 15f, "车辆未能静置");
+            prep.car = Host.ActiveCar;
+            prep.car.TestThrottleOverride = -1f;
+            prep.car.ResetPose();
+            yield return WaitUntil(() => prep.car.SpeedMps < 0.05f, 15f, "车辆未能静置");
             yield return new WaitForSeconds(0.3f);
         }
 
@@ -61,8 +64,9 @@ namespace RCPlaza.Tests
         [UnityTest]
         public IEnumerator Both_Cars_Rest_Grounded_At_CgHeight()
         {
-            RcCarController c;
-            yield return PrepCar(0, out c);
+            var prep = new CarPrep();
+            yield return PrepCar(0, prep);
+            RcCarController c = prep.car;
             Assert.That(c.SpeedMps, Is.LessThan(0.1f));
             foreach (var w in c.Wheels)
                 Assert.That(w.grounded, "静止时四轮应接地");
@@ -76,8 +80,9 @@ namespace RCPlaza.Tests
         [UnityTest]
         public IEnumerator SCT_0_To_40kmh_Matches_Doc_Range()
         {
-            RcCarController c;
-            yield return PrepCar(0, out c);
+            var prep = new CarPrep();
+            yield return PrepCar(0, prep);
+            RcCarController c = prep.car;
             c.TestThrottleOverride = 1f;
             float t0 = Time.fixedTime;
             yield return WaitUntil(() => c.SpeedMps >= Slash40, 25f, "25s 内未达 40 km/h");
@@ -90,8 +95,9 @@ namespace RCPlaza.Tests
         [UnityTest]
         public IEnumerator Slide_1mps_Coast_Distance_3to6m()
         {
-            RcCarController c;
-            yield return PrepCar(0, out c);
+            var prep = new CarPrep();
+            yield return PrepCar(0, prep);
+            RcCarController c = prep.car;
             c.TestThrottleOverride = 0.35f;      // 温和加速到 1 m/s(≈F3 测试同款流程)
             yield return WaitUntil(() => c.SpeedMps >= 1.0f, 20f, "20s 未达 1 m/s");
             c.TestThrottleOverride = -1f;
@@ -107,8 +113,9 @@ namespace RCPlaza.Tests
         [UnityTest]
         public IEnumerator Steady_Circle_At_25kmh_Roll_Matches_Doc()
         {
-            RcCarController c;
-            yield return PrepCar(0, out c);
+            var prep = new CarPrep();
+            yield return PrepCar(0, prep);
+            RcCarController c = prep.car;
             // 0.10 舵量(2.6°)→ 理论 R≈6.2m;25km/h 时 a_y≈6.1m/s²≈μg 极限,侧倾应达文档 3–5°
             Host.PlayerInput.SteerOverrideX = 0.10f;
             c.TestThrottleOverride = 0.35f;
@@ -135,8 +142,9 @@ namespace RCPlaza.Tests
         [UnityTest]
         public IEnumerator SCT_TopSpeed_Approaches_Doc_55kmh()
         {
-            RcCarController c;
-            yield return PrepCar(0, out c);
+            var prep = new CarPrep();
+            yield return PrepCar(0, prep);
+            RcCarController c = prep.car;
             // z=30 沥青直道(广场外围车道:无路沿/装饰物/灯柱),x=-34 起步向东共 74m
             c.SetPose(new Vector3(-34f, 0.13f, 30f), Quaternion.Euler(0f, 90f, 0f));
             yield return new WaitForSeconds(0.4f);
@@ -161,8 +169,9 @@ namespace RCPlaza.Tests
         [UnityTest]
         public IEnumerator MT_Climbs_4cm5_Curb()
         {
-            RcCarController c;
-            yield return PrepCar(1, out c);
+            var prep = new CarPrep();
+            yield return PrepCar(1, prep);
+            RcCarController c = prep.car;
             // 从 (6,8) 朝 +z 冲向北平沿(z≈19.9);x=6 避开 z=17.2 的长椅
             c.SetPose(new Vector3(6f, 0.14f, 8f), Quaternion.identity);
             yield return new WaitForSeconds(0.4f);

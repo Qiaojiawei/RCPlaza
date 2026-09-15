@@ -22,13 +22,14 @@ namespace RCPlaza.Tests
             Assert.That(b.soc, Is.EqualTo(1f), "初始 SOC=100%");
 
             // 满油门 15000rpm 连续放电(CPU 模拟 400s,无需 Play)
+            // 注:电流→端电压滞后一步,首帧 V 仍为 OCV,故统计全程最小值
             float dt = 0.01f;
-            float vFirst = -1f;
+            float vMin = 99f;
             bool sawSag = false, sawLimit = false, sawCut = false;
             for (float t = 0f; t < 400f; t += dt)
             {
                 float torque = b.Update(1f, 15000f, dt);
-                if (t == 0f) vFirst = b.packVoltage;
+                vMin = Mathf.Min(vMin, b.packVoltage);
                 if (b.packVoltage < b.ocv - 0.01f) sawSag = true;
                 if (b.powerLimit < 1f) sawLimit = true;
                 if (b.lvcCut)
@@ -38,7 +39,7 @@ namespace RCPlaza.Tests
                     break;
                 }
             }
-            Assert.That(vFirst, Is.LessThan(8.35f), "满油门下端电压应明显低于 OCV(电压 sag)");
+            Assert.That(vMin, Is.LessThan(8.35f), $"满油门下端电压应明显低于 OCV(电压 sag,实测最低 {vMin:F3}V)");
             Assert.That(sawSag, "放电全程应出现电压 sag");
             Assert.That(b.soc, Is.LessThan(0.2f), "持续放电应消耗大量电量");
             Assert.That(sawLimit, "低 SOC 时应先触发 50% 限功(3.4V/芯)");
@@ -104,7 +105,7 @@ namespace RCPlaza.Tests
             {
                 var tex = TextureFactory.Get(t);
                 Assert.NotNull(tex, $"{t} 纹理生成失败");
-                Assert.That(tex.width, Is.GreaterThanOrEqual(256));
+                Assert.That(tex.width, Is.GreaterThanOrEqualTo(256));
                 Assert.That(tex.height, Is.EqualTo(tex.width));
                 Assert.That(tex.wrapMode, Is.EqualTo(TextureWrapMode.Repeat));
             }

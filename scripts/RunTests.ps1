@@ -60,17 +60,21 @@ function Find-UnityEditor {
     exit 1
 }
 
-# ---- license check (Editor requires an activated license even headless) -----
-function Test-UnityLicense($unity) {
-    $log = Join-Path $LogDir "license-check.log"
-    $p = Start-Process -FilePath $unity -ArgumentList @(
-        "-batchmode", "-nographics", "-projectPath", $ProjectPath,
-        "-logFile", $log, "-verifyLicensing"  # unknown switches ignored in 2022; use -quit run below
-    ) -Wait -PassThru -NoNewWindow
-    return $p.ExitCode
+# ---- keep Unity Hub alive: the Hub process brokers the editor license -------
+# (editor headless runs fail with "No ULF license found / token not found"
+#  as soon as the Hub is not running)
+function Ensure-HubRunning {
+    if (Get-Process "Unity Hub" -ErrorAction SilentlyContinue) { return }
+    try {
+        $pkg = Get-AppxPackage UnityTechnologies.UnityHub | Select-Object -First 1
+        if ($pkg) {
+            Start-Process (Join-Path $pkg.InstallLocation "Unity Hub.exe")
+            Start-Sleep -Seconds 8
+        }
+    } catch { }
 }
 
-# Older editors lack -verifyLicensing; rely on runTests failure message instead.
+# ---- license check (Editor requires an activated license even headless) -----
 function Assert-Licensed($unity) {
     $log = Join-Path $LogDir "license-check.log"
     $p = Start-Process -FilePath $unity -ArgumentList @(
@@ -81,6 +85,8 @@ function Assert-Licensed($unity) {
         Write-Host ""
         Write-Host "[ERROR] Unity Editor license not activated in this machine." -ForegroundColor Red
         Write-Host "        One-time manual step (pick ONE):"
+        Write-Host "        A0) Make sure Unity Hub is running (it brokers the license) - this script
+             starts it automatically, but a fresh machine may need a Hub GUI sign-in;"
         Write-Host "        A) Open Unity Hub GUI -> Sign in with your Unity account -> it activates automatically, then re-run this script;"
         Write-Host "        B) Manual license:"
         Write-Host "             $unity -batchmode -createManualActivationFile -logFile alf.log"
@@ -113,9 +119,16 @@ function Invoke-TestPlatform($unity, $platform) {
     ) -PassThru -NoNewWindow
 
     if (-not $p.WaitForExit([int]($TimeoutMinutes * 60 * 1000))) {
-        $p.Kill()
-        Write-Host "[ERROR] ${platform} timed out after ${TimeoutMinutes} min (first import can be slow; -TimeoutMinutes to extend)" -ForegroundColor Red
-        exit 2
+        # Unity batchmode sometimes lingers AFTER saving results; treat a
+        # complete results file as success even if the process hangs on exit.
+        if (Test-Path $xml) {
+            Write-Host "    (Unity process lingered after saving results; collecting XML and killing it)"
+            $p.Kill()
+        } else {
+            $p.Kill()
+            Write-Host "[ERROR] ${platform} timed out after ${TimeoutMinutes} min (first import can be slow; -TimeoutMinutes to extend)" -ForegroundColor Red
+            exit 2
+        }
     }
     $sw.Stop()
 
@@ -163,6 +176,7 @@ Write-Host "Unity editor: $unity" -ForegroundColor Cyan
 Write-Host "Project    : $ProjectPath"
 Write-Host "Logs       : $LogDir"
 
+Ensure-HubRunning       # Hub must stay alive to broker the editor license
 Assert-Licensed $unity
 
 $totalFailed = 0

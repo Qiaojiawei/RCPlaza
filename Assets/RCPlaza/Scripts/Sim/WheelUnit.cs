@@ -143,7 +143,7 @@ namespace RCPlaza.Sim
                 t -= Mathf.Sign(omega) * tb;
             }
             if (grounded)
-                t -= sp.crr * fz * wheelRadius * Mathf.Tanh(omega / 2f);
+                t -= sp.crr * fz * wheelRadius * (float)System.Math.Tanh(omega / 2f);
 
             omega += t * dt / inertia;
             omega = Mathf.Clamp(omega, -maxOmega, maxOmega);

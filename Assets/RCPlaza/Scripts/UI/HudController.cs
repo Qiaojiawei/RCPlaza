@@ -68,18 +68,18 @@ namespace RCPlaza.UI
             RectTransform cv = (RectTransform)canvasGo.transform;
 
             // 左上:车型 + 速度
-            AddPanel(cv, new Vector2(0f, 1f), new Vector2(14f, -10f), new Vector2(340f, 82f));
+            AddPanel(cv, new Vector2(0f, 1f), new Vector2(14f, -10f), new Vector2(340f, 82f), new Color(0f, 0f, 0f, 0.45f));
             carNameText = AddText(cv, new Vector2(0f, 1f), new Vector2(30f, -24f), 20, "", Color.white, true);
             speedText = AddText(cv, new Vector2(0f, 1f), new Vector2(30f, -54f), 34, "0.0 km/h", new Color(1f, 0.86f, 0.45f), true);
 
             // 右上:电池
-            AddPanel(cv, new Vector2(1f, 1f), new Vector2(-14f, -10f), new Vector2(300f, 92f));
+            AddPanel(cv, new Vector2(1f, 1f), new Vector2(-14f, -10f), new Vector2(300f, 92f), new Color(0f, 0f, 0f, 0.45f));
             battText = AddText(cv, new Vector2(1f, 1f), new Vector2(-30f, -24f), 16, "", Color.white, false);
             socText = AddText(cv, new Vector2(1f, 1f), new Vector2(-30f, -50f), 24, "", new Color(0.55f, 0.95f, 0.55f), true);
             warnText = AddText(cv, new Vector2(1f, 1f), new Vector2(-30f, -78f), 15, "", new Color(1f, 0.30f, 0.22f), true);
 
             // 左下:控制状态
-            AddPanel(cv, new Vector2(0f, 0f), new Vector2(14f, 10f), new Vector2(460f, 42f));
+            AddPanel(cv, new Vector2(0f, 0f), new Vector2(14f, 10f), new Vector2(460f, 42f), new Color(0f, 0f, 0f, 0.45f));
             ctrlText = AddText(cv, new Vector2(0f, 0f), new Vector2(30f, 31f), 17, "", new Color(0.85f, 0.90f, 0.95f), false);
 
             // 底中:键位提示
