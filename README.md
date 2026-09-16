@@ -15,9 +15,29 @@ UI 纯代码、场景运行时构建——仓库只含文本文件，导入即�
 1. **安装 Unity 2022.3 LTS**（推荐 2022.3.20f1，任意 2022.3.x 均可）：
    Unity Hub → Installs → 安装 Windows Build Support 的 2022.3 版本。
    无需任何额外模块（不依赖 Input System、URP、TextMeshPro）。
-2. **打开工程**：Unity Hub → Open → Add project from disk → 选择本目录 `D:\RCPlaza`。
+2. **正式启动游戏（图形界面）——三种方式任选其一**：
+
+   - **方式一（推荐，一键脚本）** `scripts\OpenGame.ps1`：自动定位编辑器、
+     确保 Unity Hub 存活（许可证代理）、启动编辑器并直接载入游戏场景，
+     退出 0 表示已拉起。带 `-Stop` 停止编辑器（保留 Hub）：
+
+     ```powershell
+     powershell -ExecutionPolicy Bypass -File scripts\OpenGame.ps1       # 启动
+     powershell -ExecutionPolicy Bypass -File scripts\OpenGame.ps1 -Stop # 停止
+     ```
+
+   - **方式二（Hub 图形界面）**：Unity Hub → Open → Add project from disk →
+     选择本目录 `D:\RCPlaza` → 点击项目卡片打开编辑器。
+   - **方式三（命令行）**：Unity Hub 需保持运行以代理许可证：
+
+     ```powershell
+     & "C:\Program Files\Unity\Hub\Editor\2022.3.20f1\Editor\Unity.exe" -projectPath D:\RCPlaza
+     ```
+
 3. **首次导入**：等待 1–2 分钟（自动生成 Library 与全部 .meta）。
-4. **运行**：打开 `Assets/RCPlaza/Scenes/RCPlaza_Minimal.unity` → 按 Play。
+4. **进入游戏**：编辑器窗口出现后按 **▶ Play**（方式一会自动打开
+   `Assets/RCPlaza/Scenes/RCPlaza_Minimal.unity`；方式二/三需在 Project 窗口
+   双击该场景）。
    > 双保险：即使不打开任何场景（例如编辑器里的 New Scene），按 Play 同样完整运行——
    > 入口是 `[RuntimeInitializeOnLoadMethod]` 引导，与场景内容无关。
 
@@ -61,7 +81,8 @@ EditMode 纯计算单元测试 + PlayMode 真实运行验收，全部无图形�
 自动生效；或 `Unity.exe -batchmode -createManualActivationFile` 生成 .alf →
 https://license.unity3d.com/manual 上传换 .ulf → `-manualLicenseFile`。
 
-**一键运行**（首次含导入约 10–25 分钟，之后约 3–5 分钟）：
+**一键运行**（首次含导入约 10–25 分钟，之后约 2–5 分钟，暖缓存实测 ≈1.5 分钟；
+脚本会自动识别"结果已写出但批处理进程滞留"的情况并将其回收，不会空等超时）：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\RunTests.ps1
@@ -125,8 +146,11 @@ Assets/RCPlaza/
 
 1. **悬架参数修正**：文档 §3.3 的 k=28000–32000 N/m 会使 2.64 kg 车身静态压缩仅
    0.21 mm（悬挂视觉冻结），与文档自身的 "TargetPosition 0.5" 矛盾。
-   修正为按"静载压缩 ≈ 50% 行程"反推：SCT k≈370 N/m、c≈25 N·s/m；MT k≈530、c≈40。
-   文档原值保留在 `CarSpec.cs` 注释中备查。
+   修正为按"静载压缩 ≈ 50% 行程"反推：SCT k≈370 N/m、c≈32 N·s/m；
+   MT k≈530 N/m、c≈55 N·s/m。弹簧刚度决定稳态（静压、侧倾）并固定，
+   阻尼取 ζ≈0.9 拟临界以压住起步俯仰振荡与全伸位阻尼踢（曾 ζ≈0.7，实测把
+   SCT 顶成持续翘头、极速测试在 42 km/h 端头提前腾空）。文档原值保留在
+   `CarSpec.cs` 注释中备查。
 2. **电机扭矩曲线**：文档曲线在 0 转速处扭矩为 0（车辆无法起步，是不动点），
    故改为堵转至 70% 转速全程 0.92 峰值平台（真实无刷电调起步进角 boost 特性；
    早期版本用 0.30 堵转兜底，但在轮胎反作用力矩轮转耦合补全后，0.30 兜底会把

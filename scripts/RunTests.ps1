@@ -9,7 +9,9 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\RunTests.ps1 -EditorPath "C:\...\Unity.exe"
 #
 # First run may take 10-25 min (package import + compilation + both suites).
-# Re-runs take ~3-5 min (Library cached).
+# Re-runs take ~2-5 min, ~1.5 min measured with warm caches (a lingering
+# batchmode process after results are saved is detected via results polling
+# and reclaimed immediately instead of waiting out the full timeout).
 #
 # Exit codes: 0 = ALL tests passed, 1 = license/tooling problem, 2 = test failures
 # =============================================================================
@@ -19,7 +21,8 @@ param(
     [switch]$EditOnly,
     [switch]$PlayOnly,
     [string]$LogDir = "",
-    [int]$TimeoutMinutes = 25
+    [int]$TimeoutMinutes = 25,
+    [string]$ManualLicense = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,16 +69,29 @@ function Find-UnityEditor {
 function Ensure-HubRunning {
     if (Get-Process "Unity Hub" -ErrorAction SilentlyContinue) { return }
     try {
-        $pkg = Get-AppxPackage UnityTechnologies.UnityHub | Select-Object -First 1
-        if ($pkg) {
-            Start-Process (Join-Path $pkg.InstallLocation "Unity Hub.exe")
-            Start-Sleep -Seconds 8
-        }
+        # MSIX-packaged Hub: "<InstallLocation>\Unity Hub.exe" is not directly
+        # launchable (file-not-found); the shell:AppsFolder alias of the
+        # installed package works.
+        Start-Process 'shell:AppsFolder\UnityTechnologies.UnityHub_2vrhnee42bhxm!UnityHub'
+        Start-Sleep -Seconds 8
     } catch { }
 }
 
 # ---- license check (Editor requires an activated license even headless) -----
 function Assert-Licensed($unity) {
+    if ($ManualLicense -ne "") {
+        Write-Host "Activating license from file: $ManualLicense" -ForegroundColor Cyan
+        $actLog = Join-Path $LogDir "license-activate.log"
+        $p = Start-Process -FilePath $unity -ArgumentList @(
+            "-batchmode", "-nographics", "-quit", "-projectPath", $ProjectPath,
+            "-manualLicenseFile", $ManualLicense, "-logFile", $actLog
+        ) -Wait -PassThru -NoNewWindow
+        if ($p.ExitCode -ne 0) {
+            Write-Host "[ERROR] License activation failed (exit $($p.ExitCode)); see $actLog" -ForegroundColor Red
+            exit 1
+        }
+        return
+    }
     $log = Join-Path $LogDir "license-check.log"
     $p = Start-Process -FilePath $unity -ArgumentList @(
         "-batchmode", "-nographics", "-quit", "-projectPath", $ProjectPath,
@@ -118,17 +134,34 @@ function Invoke-TestPlatform($unity, $platform) {
         "-logFile", $log
     ) -PassThru -NoNewWindow
 
-    if (-not $p.WaitForExit([int]($TimeoutMinutes * 60 * 1000))) {
-        # Unity batchmode sometimes lingers AFTER saving results; treat a
-        # complete results file as success even if the process hangs on exit.
-        if (Test-Path $xml) {
-            Write-Host "    (Unity process lingered after saving results; collecting XML and killing it)"
-            $p.Kill()
-        } else {
-            $p.Kill()
-            Write-Host "[ERROR] ${platform} timed out after ${TimeoutMinutes} min (first import can be slow; -TimeoutMinutes to extend)" -ForegroundColor Red
+    # Unity batchmode sometimes lingers AFTER saving results (EditMode on this
+    # machine once sat untouched for the full timeout with a complete XML on
+    # disk). Instead of dead-waiting, poll within the deadline:
+    #  - process exited                                            -> normal;
+    #  - results XML exists, was written after THIS run started, and parses to
+    #    a finished <test-run> (Unity writes it only when the run completes;
+    #    a corrupt half-written file fails parsing and is ignored) -> done,
+    #    kill the lingering process and continue.
+    if (Test-Path $xml) { Remove-Item $xml -Force -ErrorAction SilentlyContinue }   # stale-XML guard
+    $xmlBase = Get-Date
+    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
+    $savedOk = $false
+    while ((Get-Date) -lt $deadline) {
+        if ($p.WaitForExit(10000)) { break }
+        if ((Test-Path $xml) -and ((Get-Item $xml).LastWriteTime -gt $xmlBase)) {
+            try {
+                [xml]$probe = Get-Content $xml -Raw
+                if ($probe.'test-run' -and $null -ne $probe.'test-run'.result) { $savedOk = $true; break }
+            } catch { }
+        }
+    }
+    if (-not $p.HasExited) {
+        $p.Kill()
+        if (-not $savedOk) {
+            Write-Host "[ERROR] ${platform} timed out after ${TimeoutMinutes} min without a complete results file (first import can be slow; -TimeoutMinutes to extend)" -ForegroundColor Red
             exit 2
         }
+        Write-Host "    (Unity process lingered after saving results; collected the XML and killed it)"
     }
     $sw.Stop()
 
