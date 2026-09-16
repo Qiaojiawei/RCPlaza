@@ -294,8 +294,14 @@ namespace RCPlaza.Sim
                     if (smooth) smoothCount++;
 
                     float latScale = smooth ? spec.latGripOnRoad : spec.latGripOffRoad;
-                    Vector3 force = w.ComputeTyreForces(rb, sp, latScale, w.steerDeg);
+                    // 顺序关键:先钉 ω(本帧 λ*),再求力。旧顺序(先求力后钉 ω)使力
+                    // 评估上一帧的 ω:车辆加/减速时上一帧钉扎值对当前速度漂移
+                    // +a·dt,滑移率被系统性衰减——收油滑行制动力被打对折(滑距
+                    // 9.7m 对理论 4.2-4.9m),纵向前进减速段同理。落地瞬间旧 ω
+                    // (离地轰油积到 maxOmega)会以 λ≈5 的滑移猛踢前轮,驱动
+                    // 俯仰翻滚极限环(MT 0→70 实测 5.9-7.7s 的部分成因)。
                     w.IntegrateSpin(wheelTorque * torqueSign, brake, sp, maxOmega, dt);
+                    Vector3 force = w.ComputeTyreForces(rb, sp, latScale, w.steerDeg);
                     rb.AddForceAtPosition(force, w.hitPoint, ForceMode.Force);
                 }
                 else
@@ -320,12 +326,20 @@ namespace RCPlaza.Sim
                 rb.AddForceAtPosition( f * up, rb.transform.TransformPoint(wheels[ir].anchorLocal), ForceMode.Force);
             }
 
+            // 偏航阻尼(稳定性工程项):高滑移区轮胎纵向力负斜率会把左右轮扰动放大成
+            // 烧胎打转(实测 λ≈7 时推力 8.7N 而车速不动);小幅偏航阻尼等价于
+            // 真实轮胎自回正力矩 + 轮距几何的定向稳定效应。只阻尼偏航,不碰俯仰/侧倾。
+            {
+                Vector3 av = rb.transform.InverseTransformDirection(rb.angularVelocity);
+                rb.AddTorque(-rb.transform.up * av.y * spec.yawDamp, ForceMode.Force);
+            }
+
             // 空气阻力(作用于质心;与电机扭矩衰减共同决定真实极速)
             float v2 = rb.velocity.sqrMagnitude;
             if (v2 > 0.01f)
             {
-                rb.AddForce(-rb.velocity * (0.5f * 1.225f * spec.dragCd * spec.dragAreaM2 * Mathf.Sqrt(v2)),
-                            ForceMode.Force);
+                var fd = -rb.velocity * (0.5f * 1.225f * spec.dragCd * spec.dragAreaM2 * Mathf.Sqrt(v2));
+                rb.AddForce(fd, ForceMode.Force);
             }
 
             UpdateReadouts();
@@ -369,10 +383,17 @@ namespace RCPlaza.Sim
 
         public void ResetPose() => SetPose(SpawnPos, SpawnRot);
 
+        /// <summary>电池回满(自动化测试用例隔离用)。</summary>
+        public void ResetBatteryForTest() => battery.ResetForTest();
+
         /// <summary>把车放到任意位置/朝向(自动化测试用:长直道极速、路沿冲击等需要指定起点)。</summary>
         public void SetPose(Vector3 pos, Quaternion rot)
         {
-            transform.SetPositionAndRotation(pos, rot);
+            // 关键:带 Interpolate/CCD 的刚体必须直接写 rb 位姿——写 transform 会在
+            // 下一物理步被插值回写覆盖(实测批量套件中 SetPose 后车仍停在原路沿位,
+            // 后续用例全部在错误起点执行)。写 rb.position 直达物理体,插值只平滑渲染。
+            rb.position = pos;
+            rb.rotation = rot;
             rb.velocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
             rb.WakeUp();
@@ -384,5 +405,29 @@ namespace RCPlaza.Sim
         /// <summary>车型切换:接管另一台车的位置与朝向。</summary>
         public void TakePoseFrom(RcCarController other) =>
             SetPose(other.transform.position, other.transform.rotation);
+
+        /// <summary>测试诊断:四轮力/滑移/角速度/压缩/纵向滑速摘要(失败信息用)。</summary>
+        public string WheelDebugString()
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < 4; i++)
+            {
+                var w = wheels[i];
+                sb.AppendFormat("W{0}:Fz{1:F1} Fx{2:F2} λ{3:F2} ω{4:F0} c{5:F0} vl{6:F1}  ",
+                    i, w.fz, w.fx, w.slipRatio, w.omega, w.compression * 1000f, w.vLong);
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>测试诊断:垂直速度分量(弹跳检测,正值向上)。</summary>
+        public float VertSpeedMps => rb.velocity.y;
+
+        /// <summary>测试诊断:偏航速率(rad/s,正值左转)。</summary>
+        public float YawRateRad =>
+            rb.transform.InverseTransformDirection(rb.angularVelocity).y;
+
+        /// <summary>测试诊断:电机电流与扭矩(收油期应为 0,非零即动力回路 bug)。</summary>
+        public float MotorCurrentA => battery.currentA;
+        public float MotorTorqueNm => battery.lastTorque;
     }
 }

@@ -36,19 +36,25 @@ namespace RCPlaza.Core
         // 悬挂视觉冻结、25km/h 定圆侧倾仅 0.04°,与文档自身的"TargetPosition 0.5""侧倾 3–5°"验收目标
         // (文档 §7③)矛盾。此处按"静载压缩 ≈ 50% 行程"反推修正:k = mg/4 ÷ (0.5×行程)。
         // Slash: 6.48N ÷ 0.0175m ≈ 370 N/m;Kraton: 11.9N ÷ 0.0225m ≈ 530 N/m。
-        // 阻尼取 ζ≈0.7: c = 2ζ√(k·m/4)。
+        // 阻尼取 ζ≈0.9: c = 2ζ√(k·m/4)。(曾 0.7/25:起步俯仰振荡 + 前轮 droop 边界
+        // 半波整流踢实测把 SCT 顶成 3° 持续翘头、极速测试在 42km/h 端头腾空;实测定圆
+        // 侧倾均值只取决于 k 稳态,c 只伤瞬态,故提高到 0.9 拟临界。)
         public float suspensionTravel = 0.035f; // 行程 35mm(文档 §2.1:避震长 48mm,行程约 35mm)
         public float springStiffness  = 370f;   // N/m per wheel(修正值,推导见上)
-        public float damperRate       = 25f;    // N·s/m per wheel(ζ≈0.72)
+        public float damperRate       = 32f;    // N·s/m per wheel(ζ≈0.9)
         public float antiRollBar      = 30f;    // N/m 每轴(压缩差→两侧等大反向竖直力)
 
         // ---------- 动力传动(文档 §2.1 / §3.4) ----------
         public float motorKv        = 3500f;    // Velineon 3500:3500 RPM/V
         public float gearRatio      = 7.32f;    // 总传动比 7.32:1(内齿比 5.04:1)
         public float drivetrainEff  = 0.88f;    // 齿轮传动效率 85–92% 取 0.88
-        /// <summary>电机峰值扭矩(标称电压下)。推导:使起步轮上力 ≈ 10N(0–40km/h ≈ 2.9s,文档 §7②),
-        /// 且 2S 极速落 50–55km/h(文档 §2.1)。</summary>
-        public float torquePeakNm   = 0.085f;   // N·m
+        /// <summary>电机峰值扭矩(标称电压下)。推导:轮转耦合(−Fx·r)补全后,起步轮上力走
+        /// T·η·g/r 的诚实扭矩通道——0.100 N·m ⇒ ≈11.3 N(0→40km/h ≈2.7–2.9s,在 μFz
+        /// 抓地 ≈16.8N 之下不烧胎,文档 §7②);极速由 风阻 × 扭矩衰减 平衡落 ≈58.5 km/h,
+        /// 与文档"约 50 km/h(2S)"一致(3S 外推 ≈80 km/h 亦对得上,README 偏差 4 复核;
+        /// 实测跑满 74m 直道后 ≈59.0 km/h,落在收敛区间 57.5–58.5 附近)。
+        /// 曾按 0.085 推导,但那是 λ 储能通道放大的结果,耦合补全后实测 0→40≈4.9s 超标。</summary>
+        public float torquePeakNm   = 0.100f;   // N·m
         public float escCurrentLimitA = 200f;   // VXL-3s 电调电流上限
         /// <summary>F4 加速测试目标速度(m/s,文档 §7②:Slash 0–40km/h / Kraton 0–70km/h)。</summary>
         public float accelTargetMps = 11.11f;   // 40 km/h
@@ -72,9 +78,13 @@ namespace RCPlaza.Core
         public float dragCd          = 1.05f;   // 短卡车身风阻大
         public float dragAreaM2      = 0.050f;  // 迎风面积
 
-        // ---------- 轮胎特性(文档 §3.1:越野胎横向抓地下降 20–25%) ----------
+        // ---------- 轮胎特性(文档 §3.1:越野胎横向抓地下降 20–25%;越野胎滚阻 1.8–2.2× 公路胎) ----------
         public float latGripOnRoad   = 1.00f;   // 铺装路面横向抓地倍率(Slash 公路胎)
         public float latGripOffRoad  = 0.85f;   // 草地/碎石横向抓地倍率
+        public float crrMult         = 1.0f;    // 滚阻倍率(胎质差异:WheelUnit 里 × 地表 Crr;Kraton 越野胎取 2.0)
+
+        // ---------- 稳定性工程项(文档未列,烧胎失稳必须) ----------
+        public float yawDamp         = 0.8f;    // N·m·s/rad 偏航阻尼(等价轮胎自回正+轮距几何)
 
         // ---------- 视觉 ----------
         public Color bodyColor    = new Color(0.79f, 0.18f, 0.16f); // 车壳红
@@ -115,13 +125,15 @@ namespace RCPlaza.Core
             s.unsprungMassPerWheel = 0.18f;
             s.suspensionTravel = 0.045f;
             s.springStiffness = 530f;              // 修正推导:11.9N ÷ 0.0225m
-            s.damperRate  = 40f;
+            s.damperRate  = 55f;                   // ζ≈0.9(同 Slash 成效:压起步俯仰振荡)
             s.antiRollBar = 60f;
             s.motorKv     = 2050f;                 // Spektrum 2050Kv,6S
-            s.gearRatio   = 10.0f;                 // 出厂偏扭力齿比(扭矩峰值约为 Slash 2.5–3 倍)
+            s.gearRatio   = 10.0f;                 // 出厂偏扭力齿比(峰值扭矩 3.5× Slash,见下偏差 6)
             s.drivetrainEff = 0.88f;
-            s.torquePeakNm = 0.35f;                // 推导:起步轮上力 ≈ 34N(≈1.2×抓地,轻微烧胎),
-                                                   // 0–70km/h ≈ 2.7s,极速 ≈ 92km/h(文档:96,高速齿比)
+            s.torquePeakNm = 0.35f;                // 3.5× Slash,略超文档 §2.2"扭矩 2.5–3 倍"指引(偏差 6):
+                                                   // 反推自 §7② 0–70km/h≈3s 与 §5 半油门爬 4.5cm 路沿;起步轮上力
+                                                   // ≈37N > μFz 抓地 ≈31N,由轮转闭合的峰值饱和兜底(轻微烧胎起步),
+                                                   // 0–70km/h 实测 ≈3.2s,极速 ≈ 92km/h(文档:96,高速齿比)
             s.escCurrentLimitA = 150f;             // Firma 150A 电调
             s.accelTargetMps = 19.44f;              // 70 km/h
             s.cells      = 6;
@@ -136,6 +148,7 @@ namespace RCPlaza.Core
             s.dragAreaM2 = 0.095f;
             s.latGripOnRoad  = 0.78f;              // 文档 §3.1:越野胎铺装路面横向抓地 −22%
             s.latGripOffRoad = 1.00f;              // 越野胎在草地/碎石上有相对优势
+            s.crrMult        = 2.0f;               // 文档 §3.1:越野胎滚阻 = 公路胎 1.8–2.2 倍,取 2.0
             s.bodyColor    = new Color(0.16f, 0.37f, 0.79f); // 车壳蓝
             s.accentColor  = new Color(0.94f, 0.64f, 0.10f); // 橙色点缀
             s.chassisColor = new Color(0.15f, 0.15f, 0.17f);

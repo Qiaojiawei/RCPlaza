@@ -88,5 +88,12 @@ namespace RCPlaza.Audio
             windLp.cutoffFrequency = Mathf.Lerp(300f, 1100f, v2);
             windSrc.pitch = 0.80f + 0.45f * v2;
         }
+
+        // ---------- 测试只读诊断(自动化验收:音频状态追踪车况,文档 §4) ----------
+        public float MotorPitch      => motorSrc  != null ? motorSrc.pitch  : 0f;
+        public float MotorVolume     => motorSrc  != null ? motorSrc.volume : 0f;
+        public float TyreHardVolume  => tyreHard   != null ? tyreHard.volume  : 0f;
+        public float TyreSoftVolume  => tyreSoft   != null ? tyreSoft.volume  : 0f;
+        public float WindVolume      => windSrc    != null ? windSrc.volume   : 0f;
     }
 }

@@ -24,12 +24,17 @@ namespace RCPlaza.Core
             return fz * mu * Magic(Mathf.Abs(slip), b, c, e) * Mathf.Sign(slip);
         }
 
-        /// <summary>横向力:alpha 为侧偏角(rad),方向与侧向速度一致。</summary>
+        /// <summary>
+        /// 横向力:alpha 为侧偏角(rad)。摩擦力的方向必须**对抗**侧滑:
+        /// 接地印迹相对地面的横向滑速为 vLat,地面施加的横向力 Fy = −sign(vLat)·|Fy|。
+        /// (纵向情形相反:λ = ωr−v 度量的就是轮面滑速方向,驱动力恰为 +sign(λ),
+        ///  故纵向横向两式结构不同,不可照抄。)
+        /// </summary>
         public static float Lateral(float alpha, float fz, float muEff,
             float b, float c, float e)
         {
             if (fz <= 0.0005f) return 0f;
-            return fz * muEff * Magic(Mathf.Abs(alpha), b, c, e) * Mathf.Sign(alpha);
+            return fz * muEff * Magic(Mathf.Abs(alpha), b, c, e) * (-Mathf.Sign(alpha));
         }
 
         /// <summary>

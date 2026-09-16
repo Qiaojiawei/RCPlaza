@@ -7,9 +7,10 @@ namespace RCPlaza.Sim
     /// 无刷电机三段扭矩曲线 + 锂电池电压/容量模拟(设计文档 §3.4 / §3.5)。
     ///
     /// 扭矩曲线(以转速/空载转速 x 为横轴):
-    ///   [0, 0.25): 0.30 → 0.92 线性上升(文档曲线为从 0 上升;纯 0 起点会令车辆
-    ///              永无法起步(起步扭矩=0 是不动点),故保留 0.30 堵转扭矩兜底——对文档的唯一自认偏差)
-    ///   [0.25,0.70]: 0.92 峰值平台(文档:峰值的 85–95%)
+    ///   [0, 0.70]: 0.92 峰值平台——堵转即近满扭矩(真实无刷电调起步进角 boost
+    ///              提供低速大扭矩;文档曲线 0 起点是"无法起步"的不动点,曾以 0.30
+    ///              堵转兜底替代,但轮转耦合(轮胎反作用力矩 −Fx·r)补全后,0.30 兜底
+    ///              把 0→40 拖慢到 ≈4.9s、把 MT 卡死在路沿墙下——故改为平台起步)
     ///   [0.70,0.95]: 0.92 → 0.375 线性衰减(文档:衰减至峰值的 35–40%)
     ///   [0.95,1.00]: 0.375 → 0 收尾(文档未描述,但扭矩若不归零车辆将无真实极速;
     ///               此尾段使极速由 风阻 × 扭矩衰减 自然平衡产生)
@@ -41,6 +42,25 @@ namespace RCPlaza.Sim
             powerLimit = 1f;
         }
 
+        /// <summary>回满电量(自动化测试的用例隔离用;R 键复位刻意不重置电池——真车不会瞬间回电)。</summary>
+        public void ResetForTest()
+        {
+            soc = 1f;
+            ocv = spec.FullVoltage;
+            packVoltage = ocv;
+            powerLimit = 1f;
+            lvcCut = false;
+        }
+
+        /// <summary>测试钩子:直接设定电量并同步开路电压(验收 §7④ 电量衰减用例,
+        /// 跳过数百秒的模拟放电过程)。powerLimit/lvcCut 在下一次 Update 里按新电压计算。</summary>
+        public void SetSocForTest(float s)
+        {
+            soc = Mathf.Clamp01(s);
+            ocv = OcvFromSoc(soc);
+            packVoltage = ocv;
+        }
+
         /// <summary>开路电压(每芯分段线性:满电 4.2V → 50% 约 3.75V → 接近耗尽 3.3V → 3.1V)。</summary>
         public float OcvFromSoc(float s)
         {
@@ -55,7 +75,6 @@ namespace RCPlaza.Sim
         public float TorqueFactor(float x)
         {
             x = Mathf.Clamp01(x);
-            if (x < 0.25f) return Mathf.Lerp(0.30f, 0.92f, x / 0.25f);
             if (x < 0.70f) return 0.92f;
             if (x < 0.95f) return Mathf.Lerp(0.92f, 0.375f, (x - 0.70f) / 0.25f);
             return Mathf.Lerp(0.375f, 0f, (x - 0.95f) / 0.05f);

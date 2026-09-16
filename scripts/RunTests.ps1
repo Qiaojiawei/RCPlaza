@@ -188,8 +188,10 @@ if ($totalFailed -eq 0) {
     Write-Host "==============================" -ForegroundColor Green
     Write-Host " ALL TEST SUITES PASSED " -ForegroundColor Green -BackgroundColor DarkGreen
     Write-Host "==============================" -ForegroundColor Green
-    Write-Host "Doc §7 acceptance verified: coast 3-6m, 0-40km/h 2.5-3.5s, roll 3-5deg,"
-    Write-Host "top speed approaching 55km/h, MT curb passable, battery sag/LVC working."
+    Write-Host "Doc §7 acceptance verified: coast 3-6m, SCT 0-40km/h 2.5-3.5s, MT 0-70km/h 4.0-5.5s,"
+    Write-Host "SCT circle roll 1.0-3.0deg / MT 0.2-1.5deg, top speed 52-62km/h (drag-torque balance),"
+    Write-Host "MT 4.5cm curb passable, battery sag/LVC; plus §4 audio / §5 decor / §6 phys-config checks."
+    Write-Host "(bounds are physics-corrected vs the doc - README §6 deviations 1-6)"
     exit 0
 } else {
     Write-Host "==============================" -ForegroundColor Red
